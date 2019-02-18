@@ -1,4 +1,4 @@
-package main
+package hirakud
 
 import (
     "./cache"
@@ -9,7 +9,7 @@ import (
 
 type ClientRule struct {
   id string;
-  quota uint; // only quota is overridden
+  quota int; // only quota is overridden
   clientId string;
   overridenCommonRuleId string;
 }
@@ -17,7 +17,7 @@ type ClientRule struct {
 type CommonRule struct {
   id string;
   resourceId string;
-  quota uint;
+  quota int;
   interval int;
 }
 
@@ -83,8 +83,15 @@ func removeOverriddenCommonRules(commonRules []CommonRule, clientRules []ClientR
   return matching
 }
 
+type Result struct {
+  hasBreached bool;
+  breachedRuleId string;
+  quota int;
+  currentCount int;
+}
 
-func recordInstanceAndCheck(inst Instance, cmrules []CommonRule, clrules []ClientRule) bool {
+func RecordInstanceAndCheck(inst Instance, cmrules []CommonRule, clrules []ClientRule) Result {
+  cache.InitCache()
   matchingCommonRules := findMatchingCommonRules(inst, cmrules)
   matchingClientRules := findMatchingClientRules(inst, clrules, cmrules)
   prunedCommonRules := removeOverriddenCommonRules(matchingCommonRules, matchingClientRules)
@@ -93,34 +100,30 @@ func recordInstanceAndCheck(inst Instance, cmrules []CommonRule, clrules []Clien
   for _,cmr := range prunedCommonRules {
     trackId := getTracker(inst, cmr.id, cmr.interval)
     val := cache.IncrAndGet(trackId)
-    fmt.Printf("Current count is %s :: %d\n" , trackId, val)
+    fmt.Printf("Current count is %s :: %d, quota is %d\n" , trackId, val, cmr.quota)
+    if val > cmr.quota {
+      // this is a breach
+      return returnBreach(cmr.id, cmr.quota, val)
+    }
   }
 
   for _,clr := range matchingClientRules {
     cmr := getCommonRuleById(clr.overridenCommonRuleId, cmrules)
     trackId := getTracker(inst, clr.id, cmr.interval)
     val := cache.IncrAndGet(trackId)
-    fmt.Println("Current count is %s :: %d" , trackId, val)
+    fmt.Printf("Current count is %s :: %d, quota is %d\n" , trackId, val, clr.quota)
+    if val > clr.quota {
+      // this is a breach
+      return returnBreach(clr.id, clr.quota, val)
+    }
   }
-  return true
+  return returnNoBreach()
 }
 
-func main() {
-  cache.InitCache()
-  rule1 := CommonRule{id: "cr1", resourceId: "api/getBill", quota: 60, interval: 10}
-  rule2 := CommonRule{id: "cr2", resourceId: "api/createBill", quota: 10, interval: 10}
-  rule3 := CommonRule{id: "cr3", resourceId: "api/validateBill", quota: 20, interval: 10}
-  cmrules := []CommonRule{rule1, rule2, rule3}
-
-  clrule1 := ClientRule {id: "cl1", clientId: "dp1", quota: 20, overridenCommonRuleId: "cr2"}
-  clrules := []ClientRule{clrule1}
-
-  inst := Instance{resourceId: "api/getBill", clientId: "dp1"}
-
-  for i:=0;i<100;i++ {
-    recordInstanceAndCheck(inst, cmrules, clrules)
-    time.Sleep(1000 * time.Millisecond)
-  }
-
+func returnBreach(ruleId string, quota int, currentCount int) Result {
+  return Result{hasBreached: true, breachedRuleId: ruleId, quota: quota, currentCount: currentCount}
 }
-// read rules from the files
+
+func returnNoBreach() Result {
+  return Result{hasBreached: false}
+}

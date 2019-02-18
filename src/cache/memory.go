@@ -8,7 +8,9 @@ import (
 var cacheMap map[string]string
 
 func InitCache() {
-  cacheMap = make(map[string]string)
+  if cacheMap == nil {
+    cacheMap = make(map[string]string)
+  }
 }
 
 func IncrAndGet(key string) int {
