@@ -27,19 +27,19 @@ func lcm64(a, b int) int64 {
   return int64(lcm(a, b))
 }
 
-func GetTimeWindow(timeslice int) string {
+func GetTimeWindow(interval int) string {
   now := time.Now()
   unix := now.Unix()
   epoch := now.Unix()
 
   // find the big window
-  windowLength := lcm64(60, timeslice)
+  windowLength := lcm64(60, interval)
   windowsSinceEpoch := epoch/windowLength
   epoch -= ((windowsSinceEpoch * windowLength) + (epoch % windowLength))
 
   // now find the small window
-  windows := int(unix - epoch) / (timeslice)
-  currentWindow := epoch + int64(windows * timeslice)
+  windows := int(unix - epoch) / (interval)
+  currentWindow := epoch + int64(windows * interval)
   windowStr := time.Unix(currentWindow, 0).Format("2006/01/01_15:04:05")
   return windowStr
 }

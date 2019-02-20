@@ -1,4 +1,4 @@
-package hirakud
+package gatekeeper
 
 import (
   "testing"
@@ -30,7 +30,7 @@ func TestBreachAndReset(t *testing.T) {
     }
   }
   fmt.Printf("Waiting for %d seconds\n", rule1.interval)
-  time.Sleep(rule1.interval * time.Second)
+  time.Sleep(time.Duration(10) * time.Second)
   result := RecordInstanceAndCheck(inst, cmrules, clrules)
   if result.hasBreached == true {
     t.Fatalf("The count is not clearing as expected")

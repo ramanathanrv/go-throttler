@@ -1,10 +1,11 @@
-package hirakud
+package gatekeeper
 
 import (
     "./cache"
     "./timeslice"
     "fmt"
     "time"
+    "./types"
 )
 
 type ClientRule struct {
@@ -26,14 +27,29 @@ type Instance struct {
   clientId string;
 }
 
+var localMap *types.Map
+
 func getTimeWindowId(seconds int) {
   if(seconds <= 60) {
     // we need to go to the nearest minute and then slice it
   }
 }
 
+func getCurrentTimeWindow(interval int) string {
+  // lookup the cache
+  lookupKey := fmt.Sprintf("time_interval_%d", interval)
+  val, resCode := localMap.Get(lookupKey)
+  if resCode == types.HIT {
+    return val
+  } else {
+    currentWindow := timeslice.GetTimeWindow(interval)
+    localMap.Put(lookupKey, currentWindow, time.Duration(interval) * time.Second)
+    return currentWindow
+  }
+}
+
 func getTracker(inst Instance, ruleId string, interval int) string {
-  window := timeslice.GetTimeWindow(interval)
+  window := getCurrentTimeWindow(interval)
   return fmt.Sprintf("%s_%s_%s_%s", window, inst.clientId, inst.resourceId, ruleId)
 }
 
@@ -90,8 +106,18 @@ type Result struct {
   currentCount int;
 }
 
-func RecordInstanceAndCheck(inst Instance, cmrules []CommonRule, clrules []ClientRule) Result {
+type RateLimiter interface {
+  clearCache()
+  addRule()
+  recordEvent()
+}
+
+func init() {
   cache.InitCache()
+  localMap = types.NewMap()
+}
+
+func RecordInstanceAndCheck(inst Instance, cmrules []CommonRule, clrules []ClientRule) Result {
   matchingCommonRules := findMatchingCommonRules(inst, cmrules)
   matchingClientRules := findMatchingClientRules(inst, clrules, cmrules)
   prunedCommonRules := removeOverriddenCommonRules(matchingCommonRules, matchingClientRules)
