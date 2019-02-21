@@ -31,9 +31,10 @@ var result Result
 func benchmarkRateCounting(times int, b *testing.B) {
   cmrules := getCommonRules()
   clrules := getClientRules()
-  inst := Instance{resourceId: "api/call1", clientId: "dp1"}
+  inst := Event{resourceId: "api/call1", clientId: "dp1"}
+  limiter := NewApiRateLimiter(cmrules, clrules)
   for i:=0;i<times;i++ {
-    res := RecordInstanceAndCheck(inst, cmrules, clrules)
+    res := limiter.RecordEventAndCheck(inst)
     result = res
   }
 }
@@ -51,13 +52,14 @@ func TestBreachAndReset(t *testing.T) {
 
   cmrules := getCommonRules()
   clrules := getClientRules()
+  limiter := NewApiRateLimiter(cmrules, clrules)
 
   rule1 := cmrules[0]
 
-  inst := Instance{resourceId: "api/call1", clientId: "dp1"}
+  inst := Event{resourceId: "api/call1", clientId: "dp1"}
 
   for i:=0;i<40;i++ {
-    result := RecordInstanceAndCheck(inst, cmrules, clrules)
+    result := limiter.RecordEventAndCheck(inst)
     time.Sleep(1 * time.Millisecond)
     // given quota is 20. So breach is when i exceeds 20
     if i > 20 {
@@ -70,7 +72,7 @@ func TestBreachAndReset(t *testing.T) {
   }
   fmt.Printf("Waiting for %d seconds\n", rule1.interval)
   time.Sleep(time.Duration(10) * time.Second)
-  result := RecordInstanceAndCheck(inst, cmrules, clrules)
+  result := limiter.RecordEventAndCheck(inst)
   if result.hasBreached == true {
     t.Fatalf("The count is not clearing as expected")
   }

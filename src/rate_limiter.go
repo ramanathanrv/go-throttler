@@ -22,7 +22,7 @@ type CommonRule struct {
   interval int;
 }
 
-type Instance struct {
+type Event struct {
   resourceId string;
   clientId string;
 }
@@ -48,39 +48,36 @@ func getCurrentTimeWindow(interval int) string {
   }
 }
 
-func getTracker(inst Instance, ruleId string, interval int) string {
+func getTracker(inst Event, ruleId string, interval int) string {
   window := getCurrentTimeWindow(interval)
   return fmt.Sprintf("%s_%s_%s_%s", window, inst.clientId, inst.resourceId, ruleId)
 }
 
-func getCommonRuleById(id string, allRules []CommonRule) CommonRule {
-  for _,commonRule := range allRules {
-    if commonRule.id == id {
-      return commonRule
-    }
+func (r *ApiRateLimiter) getCommonRuleById(id string) (CommonRule, bool) {
+  if cmr, ok := r.commonRulesIdxById[id]; ok {
+    return cmr, true
+  } else {
+    return CommonRule{}, false
   }
-  return CommonRule{}
 }
 
-func findMatchingClientRules(inst Instance, allRules []ClientRule, cmrules []CommonRule) []ClientRule {
+func (r *ApiRateLimiter) findMatchingClientRules(inst Event) []ClientRule {
   result := []ClientRule{}
-  for _,clientRule := range allRules {
-    cmr := getCommonRuleById(clientRule.overridenCommonRuleId, cmrules)
-    if cmr.resourceId == inst.resourceId {
+  for _,clientRule := range r.clrules {
+    cmr, ok := r.getCommonRuleById(clientRule.overridenCommonRuleId)
+    if ok && cmr.resourceId == inst.resourceId {
       result = append(result, clientRule)
     }
   }
   return result
 }
 
-func findMatchingCommonRules(inst Instance, allRules []CommonRule) []CommonRule {
-  result := []CommonRule{}
-  for _, commonRule := range allRules {
-    if commonRule.resourceId == inst.resourceId {
-      result = append(result, commonRule)
-    }
+func (r *ApiRateLimiter) findMatchingCommonRules(evt Event) []CommonRule {
+  if cmr, ok := r.commonRulesIdxByResourceId[evt.resourceId]; ok {
+    return []CommonRule{cmr}
+  } else {
+    return []CommonRule{}
   }
-  return result
 }
 
 func removeOverriddenCommonRules(commonRules []CommonRule, clientRules []ClientRule) []CommonRule {
@@ -107,9 +104,17 @@ type Result struct {
 }
 
 type RateLimiter interface {
-  clearCache()
-  addRule()
-  recordEvent()
+  // TODO
+  // AddCommonRules(cmrules []CommonRule)
+  // AddClientRules(clrules []ClientRule)
+  RecordEventAndCheck(evt Event) Result
+}
+
+type ApiRateLimiter struct {
+  commonRulesIdxById map[string]CommonRule
+  commonRulesIdxByResourceId map[string]CommonRule
+  cmrules []CommonRule
+  clrules []ClientRule
 }
 
 func init() {
@@ -117,9 +122,20 @@ func init() {
   localMap = types.NewMap()
 }
 
-func RecordInstanceAndCheck(inst Instance, cmrules []CommonRule, clrules []ClientRule) Result {
-  matchingCommonRules := findMatchingCommonRules(inst, cmrules)
-  matchingClientRules := findMatchingClientRules(inst, clrules, cmrules)
+func NewApiRateLimiter(cmrs []CommonRule, clrs []ClientRule) *ApiRateLimiter {
+  limiter := ApiRateLimiter{cmrules: cmrs, clrules: clrs}
+  limiter.commonRulesIdxById = make(map[string]CommonRule)
+  limiter.commonRulesIdxByResourceId = make(map[string]CommonRule)
+  for _,cmr := range cmrs {
+    limiter.commonRulesIdxById[cmr.id] = cmr
+    limiter.commonRulesIdxByResourceId[cmr.resourceId] = cmr
+  }
+  return &limiter
+}
+
+func (r *ApiRateLimiter) RecordEventAndCheck(inst Event) Result {
+  matchingCommonRules := r.findMatchingCommonRules(inst)
+  matchingClientRules := r.findMatchingClientRules(inst)
   prunedCommonRules := removeOverriddenCommonRules(matchingCommonRules, matchingClientRules)
   // now we have to execute the match against common & client specific
   // all matching rules are fair game
@@ -134,7 +150,7 @@ func RecordInstanceAndCheck(inst Instance, cmrules []CommonRule, clrules []Clien
   }
 
   for _,clr := range matchingClientRules {
-    cmr := getCommonRuleById(clr.overridenCommonRuleId, cmrules)
+    cmr, _ := r.getCommonRuleById(clr.overridenCommonRuleId)
     trackId := getTracker(inst, clr.id, cmr.interval)
     val := cache.IncrAndGet(trackId)
     // fmt.Printf("Current count is %s :: %d, quota is %d\n" , trackId, val, clr.quota)
