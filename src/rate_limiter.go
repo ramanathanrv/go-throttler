@@ -126,7 +126,7 @@ func RecordInstanceAndCheck(inst Instance, cmrules []CommonRule, clrules []Clien
   for _,cmr := range prunedCommonRules {
     trackId := getTracker(inst, cmr.id, cmr.interval)
     val := cache.IncrAndGet(trackId)
-    fmt.Printf("Current count is %s :: %d, quota is %d\n" , trackId, val, cmr.quota)
+    // fmt.Printf("Current count is %s :: %d, quota is %d\n" , trackId, val, cmr.quota)
     if val > cmr.quota {
       // this is a breach
       return returnBreach(cmr.id, cmr.quota, val)
@@ -137,7 +137,7 @@ func RecordInstanceAndCheck(inst Instance, cmrules []CommonRule, clrules []Clien
     cmr := getCommonRuleById(clr.overridenCommonRuleId, cmrules)
     trackId := getTracker(inst, clr.id, cmr.interval)
     val := cache.IncrAndGet(trackId)
-    fmt.Printf("Current count is %s :: %d, quota is %d\n" , trackId, val, clr.quota)
+    // fmt.Printf("Current count is %s :: %d, quota is %d\n" , trackId, val, clr.quota)
     if val > clr.quota {
       // this is a breach
       return returnBreach(clr.id, clr.quota, val)
