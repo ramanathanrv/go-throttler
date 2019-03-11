@@ -28,6 +28,7 @@ type Event struct {
 }
 
 var localMap *types.Map
+var store cache.Store
 
 func getTimeWindowId(seconds int) {
   if(seconds <= 60) {
@@ -118,7 +119,7 @@ type ApiRateLimiter struct {
 }
 
 func init() {
-  cache.InitCache()
+  store = cache.NewCache(time.Duration(300 * time.Second))
   localMap = types.NewMap()
 }
 
@@ -141,7 +142,7 @@ func (r *ApiRateLimiter) RecordEventAndCheck(inst Event) Result {
   // all matching rules are fair game
   for _,cmr := range prunedCommonRules {
     trackId := getTracker(inst, cmr.id, cmr.interval)
-    val := cache.IncrAndGet(trackId)
+    val := store.IncrAndGet(trackId)
     // fmt.Printf("Current count is %s :: %d, quota is %d\n" , trackId, val, cmr.quota)
     if val > cmr.quota {
       // this is a breach
@@ -152,7 +153,7 @@ func (r *ApiRateLimiter) RecordEventAndCheck(inst Event) Result {
   for _,clr := range matchingClientRules {
     cmr, _ := r.getCommonRuleById(clr.overridenCommonRuleId)
     trackId := getTracker(inst, clr.id, cmr.interval)
-    val := cache.IncrAndGet(trackId)
+    val := store.IncrAndGet(trackId)
     // fmt.Printf("Current count is %s :: %d, quota is %d\n" , trackId, val, clr.quota)
     if val > clr.quota {
       // this is a breach

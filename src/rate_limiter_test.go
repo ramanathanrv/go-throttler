@@ -4,6 +4,8 @@ import (
   "testing"
   "time"
   "fmt"
+  "log"
+  "./cache"
 )
 
 func getCommonRules() []CommonRule {
@@ -75,5 +77,34 @@ func TestBreachAndReset(t *testing.T) {
   result := limiter.RecordEventAndCheck(inst)
   if result.hasBreached == true {
     t.Fatalf("The count is not clearing as expected")
+  }
+}
+
+var logger *log.Logger
+func TestCacheCleanup(t *testing.T) {
+  var c = cache.NewCache(time.Duration(30 * time.Second))
+  key := "test_key"
+  for i := 0;i<10;i++ {
+    c.IncrAndGet(key)
+  }
+  fmt.Println("Current Value is: ", c.IncrAndGet(key))
+  fmt.Println(time.Now())
+  fmt.Println("Sleeping for 20 seconds")
+  time.Sleep(20 * time.Second)
+  var expectedResult = 12
+  var actualResult = c.IncrAndGet(key)
+  fmt.Println("Value is: ", actualResult)
+  if actualResult != expectedResult {
+    t.Fatalf("Expected %d but got %d", expectedResult, actualResult)
+  }
+  
+  fmt.Println("Sleeping for 40 seconds")
+  time.Sleep(40 * time.Second)
+  
+  expectedResult = 1
+  actualResult = c.IncrAndGet(key)
+  fmt.Println("Value is: ", actualResult)
+  if actualResult != expectedResult {
+    t.Fatalf("Expected %d but got %d", expectedResult, actualResult)
   }
 }
