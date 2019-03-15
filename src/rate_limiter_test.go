@@ -43,12 +43,11 @@ func benchmarkRateCounting(times int, b *testing.B) {
 
 func BenchmarkEvents1k(b *testing.B) { benchmarkRateCounting(1 * 1000, b) }
 func BenchmarkEvents10k(b *testing.B) { benchmarkRateCounting(10 * 1000, b) }
-func BenchmarkEvents100k(b *testing.B) { benchmarkRateCounting(100 * 10000, b) }
-func BenchmarkEvents1mn(b *testing.B) { benchmarkRateCounting(1000 * 10000, b) }
+func BenchmarkEvents100k(b *testing.B) { benchmarkRateCounting(100 * 1000, b) }
+func BenchmarkEvents1mn(b *testing.B) { benchmarkRateCounting(1000 * 1000, b) }
+func BenchmarkEvents5mn(b *testing.B) { benchmarkRateCounting(5 * 1000 * 1000, b) }
 // 5million takes >100s to run on a typical laptop
 // func BenchmarkEvents5mn(b *testing.B) { benchmarkRateCounting(5000 * 10000, b) }
-
-// func BenchmarkRateCounting10k()
 
 func TestBreachAndReset(t *testing.T) {
 
@@ -108,3 +107,15 @@ func TestCacheCleanup(t *testing.T) {
     t.Fatalf("Expected %d but got %d", expectedResult, actualResult)
   }
 }
+
+func TestRedisStoreInit(t *testing.T) {
+  var (
+    c cache.Store 
+    val int
+  )
+  c = cache.NewRedisStore(cache.RedisConfig{Host: "localhost", Port: 6379, DB: 0, Password: ""})
+  for i:=0;i<10;i++ {
+    val = c.IncrAndGet("hello")
+  }
+  fmt.Println("Value is: ", val)
+} 

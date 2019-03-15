@@ -1,9 +1,9 @@
 package cache
 
 import (
-    "strconv"
-    "fmt"
-    "time"
+  "strconv"
+  "fmt"
+  "time"
 )
 
 type Cache struct {
@@ -15,13 +15,9 @@ type Cache struct {
   cleanupInterval time.Duration
 }
 
-type Store interface {
-  IncrAndGet(key string) int 
-}
-
 func max(x, y int) int {
   if x > y {
-      return x
+    return x
   }
   return y
 }

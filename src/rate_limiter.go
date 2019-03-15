@@ -119,7 +119,8 @@ type ApiRateLimiter struct {
 }
 
 func init() {
-  store = cache.NewCache(time.Duration(300 * time.Second))
+  store = cache.NewRedisStore(*cache.DevConfig())
+  // store = cache.NewCache(time.Duration(300 * time.Second))
   localMap = types.NewMap()
 }
 
