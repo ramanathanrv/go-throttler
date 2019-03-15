@@ -1,38 +1,39 @@
 package cache
 
 import (
-	"github.com/go-redis/redis"
 	"fmt"
 	"time"
+
 	"../types"
+	"github.com/go-redis/redis"
 )
 
 type RedisConfig struct {
-	Host string
-	Port int
+	Host     string
+	Port     int
 	Password string
-	DB int
+	DB       int
 }
 
 type redisStore struct {
-	client *redis.Client
+	client   *redis.Client
 	checkMap *types.Map
 }
 
 func DevConfig() *RedisConfig {
 	return &RedisConfig{
-		Host: "localhost",
-		Port: 6379,
-		DB  : 0,
+		Host:     "127.0.0.1",
+		Port:     6379,
+		DB:       0,
 		Password: "",
 	}
 }
 
 func NewRedisStore(config RedisConfig) *redisStore {
 	client := redis.NewClient(&redis.Options{
-		Addr     : fmt.Sprintf("%s:%d", config.Host, config.Port),
-		Password : config.Password,
-		DB       : config.DB,
+		Addr:     fmt.Sprintf("%s:%d", config.Host, config.Port),
+		Password: config.Password,
+		DB:       config.DB,
 	})
 	checkMap := types.NewMap()
 	return &redisStore{client: client, checkMap: checkMap}
@@ -44,12 +45,12 @@ func getMaxAllowedTime() time.Duration {
 	return time.Duration(300 * time.Second)
 }
 
-func (r* redisStore) checkIfExists(key string) types.ResultCode {
+func (r *redisStore) checkIfExists(key string) types.ResultCode {
 	_, err := r.client.Get(key).Result()
 	if err == redis.Nil {
 		// key doesn't exist
 		return types.MISS
-	} else if err != nil { 
+	} else if err != nil {
 		// some issue with redis
 		// swallow it for now
 		return types.HIT // avoid going to redis much
@@ -58,7 +59,7 @@ func (r* redisStore) checkIfExists(key string) types.ResultCode {
 	}
 }
 
-func (r* redisStore) setTtlIfRequired(key string) int {
+func (r *redisStore) setTtlIfRequired(key string) int {
 	_, ok := r.checkMap.Get(key)
 	if ok != types.HIT {
 		// its a miss. we need to check Redis
@@ -72,7 +73,7 @@ func (r* redisStore) setTtlIfRequired(key string) int {
 		return 0
 	}
 	return 0
-} 
+}
 
 func (r *redisStore) IncrAndGet(key string) int {
 	result := r.setTtlIfRequired(key)
@@ -81,7 +82,7 @@ func (r *redisStore) IncrAndGet(key string) int {
 		return result
 	}
 	val, err := r.client.Incr(key).Result()
-	if(err != nil) {
+	if err != nil {
 		// something went wrong
 		// we will swallow the error and respond with 0
 		return 0
@@ -89,4 +90,3 @@ func (r *redisStore) IncrAndGet(key string) int {
 		return int(val)
 	}
 }
-  
