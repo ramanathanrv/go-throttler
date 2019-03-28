@@ -96,6 +96,7 @@ type StoreType int
 const (
 	STORE_REDIS StoreType = iota
 	STORE_MEMORY
+	STORE_SYNCED_MEMORY
 )
 
 type Result struct {
@@ -127,10 +128,14 @@ func init() {
 }
 
 func NewApiRateLimiter(cmrs []CommonRule, clrs []ClientRule, storeType StoreType) *ApiRateLimiter {
+	maxTTL := time.Duration(300 * time.Second)
 	var store cache.Store
 	if storeType == STORE_REDIS {
 		store = cache.NewRedisStore(*cache.DevConfig())
-	} else {
+	} else if storeType == STORE_SYNCED_MEMORY {
+		config := cache.SyncMemoryConfig{MaxTTL: maxTTL, FlushInterval: time.Duration(1 * time.Second)}
+		store = cache.NewSyncedMemory(&config, cache.DevConfig())
+	} else if storeType == STORE_MEMORY {
 		store = cache.NewCache(time.Duration(300 * time.Second))
 	}
 	limiter := ApiRateLimiter{cmrules: cmrs, clrules: clrs}

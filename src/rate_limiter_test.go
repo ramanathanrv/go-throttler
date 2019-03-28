@@ -77,7 +77,7 @@ func TestBreachAndReset(t *testing.T) {
 	fmt.Println("Commencing test for breach & reset")
 	cmrules := getCommonRules()
 	clrules := getClientRules()
-	limiter := NewApiRateLimiter(cmrules, clrules, STORE_MEMORY)
+	limiter := NewApiRateLimiter(cmrules, clrules, STORE_SYNCED_MEMORY)
 	rule1 := cmrules[0]
 
 	inst := Event{resourceId: "api/call1", clientId: "dp1"}
