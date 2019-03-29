@@ -193,11 +193,13 @@ func (sm *SyncedMemory) readFromStream() {
 func (sm *SyncedMemory) flush() {
 	log.Println("Beginning Flush")
 	// ip := GetLocalIP()
-	internalMap := sm.localMap.GetCurrentMap()
+	internalMap, lock := sm.localMap.GetCurrentMapWithLock()
 	pipe := sm.redisClient.Pipeline()
-	dataPoints := make([]flatEntry, len(internalMap))
+	lock.RLock()
+	defer lock.RUnlock()
+	dataPoints := make([]flatEntry, len(*internalMap))
 	count := 0
-	for k, v := range internalMap {
+	for k, v := range *internalMap {
 		dataPoints[count] = flatEntry{key: k.(string), val: v.(int)}
 		count = count + 1
 	}

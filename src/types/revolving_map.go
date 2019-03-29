@@ -58,6 +58,11 @@ func (m *RevolvingMap) GetCurrentMap() map[interface{}]interface{} {
 	return m.mapA
 }
 
+func (m *RevolvingMap) GetCurrentMapWithLock() (*map[interface{}]interface{}, *sync.RWMutex) {
+	currentMap := m.getCurrentlyActiveMap()
+	return currentMap, &lock
+}
+
 // PutInt - puts the given integer into the map
 func (m *RevolvingMap) PutInt(key string, val int) int {
 	lock.Lock()
