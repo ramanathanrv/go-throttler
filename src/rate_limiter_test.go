@@ -47,18 +47,22 @@ func benchmarkRateCounting(times int, b *testing.B) {
 }
 
 func benchmarkRateCountingOnStore(times int, storeType StoreType, b *testing.B) {
+        log.Println("Times: ", times)
 	cmrules := getCommonRules()
 	clrules := getClientRules()
-	inst := Event{resourceId: "api/call1", clientId: "dp1"}
 	limiter := NewApiRateLimiter(cmrules, clrules, storeType)
 	for i := 0; i < times; i++ {
-		res := limiter.RecordEventAndCheck(inst)
+		newinst := Event{resourceId: fmt.Sprintf("api/call%d", 1+i%100), clientId: "dp1"}
+		res := limiter.RecordEventAndCheck(newinst)
 		result = res
 	}
 }
 
 func init() {
-	log.SetOutput(ioutil.Discard)
+        s := os.Getenv("SILENT")
+        if len(s) > 0 {
+	  log.SetOutput(ioutil.Discard)
+        }
 }
 func BenchmarkEvents1k(b *testing.B)   { benchmarkRateCounting(1*1000, b) }
 func BenchmarkEvents10k(b *testing.B)  { benchmarkRateCounting(10*1000, b) }
@@ -70,14 +74,15 @@ func BenchmarkEvents100kWithMemory(b *testing.B) {
 func BenchmarkEvents100kWithRedis(b *testing.B) {
 	benchmarkRateCountingOnStore(100*1000, STORE_REDIS, b)
 }
-func BenchmarkEvents100kWithSyncMemory(b *testing.B) {
-	benchmarkRateCountingOnStore(100*1000, STORE_SYNCED_MEMORY, b)
+func BenchmarkEvents100kWithSyncMemoryOnce(b *testing.B) {
+        log.Println("Benchmarking for 100k")
+	benchmarkRateCountingOnStore(100000, STORE_SYNCED_MEMORY, b)
 }
 func BenchmarkEvents1mnWithMemory(b *testing.B) {
 	benchmarkRateCountingOnStore(1000*1000, STORE_MEMORY, b)
 }
 func BenchmarkEvents1mnWithSyncMemory(b *testing.B) {
-	benchmarkRateCountingOnStore(1000*1000, STORE_SYNCED_MEMORY, b)
+	benchmarkRateCountingOnStore(1 * 1000 * 1000, STORE_SYNCED_MEMORY, b)
 }
 func BenchmarkEvents1mnWithRedis(b *testing.B) {
 	wg := new(sync.WaitGroup)
