@@ -153,11 +153,12 @@ func (r *ApiRateLimiter) RecordEventAndCheck(inst Event) Result {
 	matchingCommonRules := r.findMatchingCommonRules(inst)
 	matchingClientRules := r.findMatchingClientRules(inst)
 	prunedCommonRules := removeOverriddenCommonRules(matchingCommonRules, matchingClientRules)
+	var val int
 	// now we have to execute the match against common & client specific
 	// all matching rules are fair game
 	for _, cmr := range prunedCommonRules {
 		trackId := getTracker(inst, cmr.id, cmr.interval)
-		val := r.store.IncrAndGet(trackId)
+		val = r.store.IncrAndGet(trackId)
 		// fmt.Printf("Current count is %s :: %d, quota is %d\n" , trackId, val, cmr.quota)
 		if val > cmr.quota {
 			// this is a breach
@@ -168,20 +169,20 @@ func (r *ApiRateLimiter) RecordEventAndCheck(inst Event) Result {
 	for _, clr := range matchingClientRules {
 		cmr, _ := r.getCommonRuleById(clr.overridenCommonRuleId)
 		trackId := getTracker(inst, clr.id, cmr.interval)
-		val := r.store.IncrAndGet(trackId)
+		val = r.store.IncrAndGet(trackId)
 		// fmt.Printf("Current count is %s :: %d, quota is %d\n" , trackId, val, clr.quota)
 		if val > clr.quota {
 			// this is a breach
 			return returnBreach(clr.id, clr.quota, val)
 		}
 	}
-	return returnNoBreach()
+	return returnNoBreach(val)
 }
 
 func returnBreach(ruleId string, quota int, currentCount int) Result {
 	return Result{hasBreached: true, breachedRuleId: ruleId, quota: quota, currentCount: currentCount}
 }
 
-func returnNoBreach() Result {
-	return Result{hasBreached: false}
+func returnNoBreach(val int) Result {
+	return Result{hasBreached: false, currentCount: val}
 }

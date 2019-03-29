@@ -1,3 +1,6 @@
 ./.DS_Store
 ./rate_limiter
-./.vscode
+.vscode
+./src/.vscode
+src/cpu.prof
+src/src.test

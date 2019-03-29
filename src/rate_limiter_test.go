@@ -2,7 +2,9 @@ package gatekeeper
 
 import (
 	"fmt"
+	"io/ioutil"
 	"log"
+	"os"
 	"testing"
 	"time"
 
@@ -52,6 +54,10 @@ func benchmarkRateCountingOnStore(times int, storeType StoreType, b *testing.B) 
 		result = res
 	}
 }
+
+func init() {
+	log.SetOutput(ioutil.Discard)
+}
 func BenchmarkEvents1k(b *testing.B)   { benchmarkRateCounting(1*1000, b) }
 func BenchmarkEvents10k(b *testing.B)  { benchmarkRateCounting(10*1000, b) }
 func BenchmarkEvents100k(b *testing.B) { benchmarkRateCounting(100*1000, b) }
@@ -62,8 +68,14 @@ func BenchmarkEvents100kWithMemory(b *testing.B) {
 func BenchmarkEvents100kWithRedis(b *testing.B) {
 	benchmarkRateCountingOnStore(100*1000, STORE_REDIS, b)
 }
+func BenchmarkEvents100kWithSyncMemory(b *testing.B) {
+	benchmarkRateCountingOnStore(100*1000, STORE_SYNCED_MEMORY, b)
+}
 func BenchmarkEvents1mnWithMemory(b *testing.B) {
 	benchmarkRateCountingOnStore(1000*1000, STORE_MEMORY, b)
+}
+func BenchmarkEvents1mnWithSyncMemory(b *testing.B) {
+	benchmarkRateCountingOnStore(1000*1000, STORE_SYNCED_MEMORY, b)
 }
 func BenchmarkEvents1mnWithRedis(b *testing.B) {
 	benchmarkRateCountingOnStore(1000*1000, STORE_REDIS, b)
@@ -100,6 +112,55 @@ func TestBreachAndReset(t *testing.T) {
 	if result.hasBreached == true {
 		t.Fatalf("The count is not clearing as expected")
 	}
+}
+
+func isEqual(expected interface{}, actual interface{}, t *testing.T) {
+	if expected == actual {
+		// all good
+	} else {
+		t.Fatalf("Expected %v but go %v", expected, actual)
+	}
+}
+func TestSyncMemoryStrategy(t *testing.T) {
+	rule1 := CommonRule{id: "cr1", resourceId: "api/call1", quota: 20, interval: 60}
+	cmrules := []CommonRule{rule1}
+	clrules := []ClientRule{}
+	inst := Event{resourceId: "api/call1", clientId: "dp1"}
+
+	os.Setenv("HOST", "H1")
+	limiter1 := NewApiRateLimiter(cmrules, clrules, STORE_SYNCED_MEMORY)
+	result1 := limiter1.RecordEventAndCheck(inst)
+
+	os.Setenv("HOST", "H2")
+	limiter2 := NewApiRateLimiter(cmrules, clrules, STORE_SYNCED_MEMORY)
+	result2 := limiter2.RecordEventAndCheck(inst)
+
+	isEqual(1, result1.currentCount, t)
+	isEqual(1, result2.currentCount, t)
+
+	time.Sleep(4 * time.Second)
+
+	// BOTH of them should have synced now
+	result11 := limiter1.RecordEventAndCheck(inst)
+	result22 := limiter2.RecordEventAndCheck(inst)
+	isEqual(3, result11.currentCount, t)
+	isEqual(3, result22.currentCount, t)
+
+	// breach in limiter1, ensure it reflects in limiter2
+	for i := 0; i < 25; i++ {
+		limiter1.RecordEventAndCheck(inst)
+	}
+	b1 := limiter1.RecordEventAndCheck(inst)
+	isEqual(true, b1.hasBreached, t)
+	log.Printf("%+v\n", b1)
+	// sleep now & allow time for sync (min 2 seconds)
+	for i := 0; i < 4; i++ {
+		time.Sleep(1 * time.Second)
+		limiter2.RecordEventAndCheck(inst)
+	}
+	b2 := limiter2.RecordEventAndCheck(inst)
+	log.Printf("%+v\n", b2)
+	isEqual(true, b2.hasBreached, t)
 }
 
 var logger *log.Logger

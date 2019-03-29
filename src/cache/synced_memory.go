@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os"
 	"strconv"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 type SyncMemoryConfig struct {
 	MaxTTL        time.Duration
 	FlushInterval time.Duration
+	host          string
 }
 
 const (
@@ -31,6 +33,10 @@ type SyncedMemory struct {
 
 // GetLocalIP returns the non loopback local IP of the host
 func GetLocalIP() string {
+	hostconf := os.Getenv("HOST")
+	if len(hostconf) > 0 {
+		return hostconf
+	}
 	addrs, err := net.InterfaceAddrs()
 	if err != nil {
 		return ""
@@ -55,6 +61,7 @@ func NewSyncedMemory(syncConfig *SyncMemoryConfig, redisConfig *RedisConfig) *Sy
 		DB:       redisConfig.DB,
 	})
 	globalDataMap := types.NewRevolvingMap(syncConfig.MaxTTL)
+	syncConfig.host = GetLocalIP()
 
 	sm := &SyncedMemory{localMap: localMap, redisClient: client, config: syncConfig, globalHostDataMap: globalDataMap}
 	sm.initializeStreamPointer() // blocking operation
@@ -66,12 +73,34 @@ func NewSyncedMemory(syncConfig *SyncMemoryConfig, redisConfig *RedisConfig) *Sy
 // IncrAndGet - increment the value pertaining to the given key
 func (sm *SyncedMemory) IncrAndGet(key string) int {
 	val, ok := sm.localMap.GetInt(key)
+	gval := sm.GetGlobalCount(key)
+	log.Println("Global value is: ", gval)
 	if ok {
 		sm.localMap.PutInt(key, val+1)
-		return val + 1
+		return val + gval + 1
 	}
 	sm.localMap.PutInt(key, 1)
-	return 1
+	return gval + 1
+}
+
+func (sm *SyncedMemory) GetGlobalCount(key string) int {
+	hostLevelCount, ok := sm.globalHostDataMap.Get(key)
+	if ok {
+		var result int = 0
+		hostMap := hostLevelCount.(*types.RevolvingMap)
+		keys := hostMap.Keys()
+		for _, key := range keys {
+			if key == nil {
+				continue
+			}
+			res, ok := hostMap.Get(key.(string))
+			if ok {
+				result += res.(int)
+			}
+		}
+		return result
+	}
+	return 0
 }
 
 type flatEntry struct {
@@ -80,7 +109,6 @@ type flatEntry struct {
 }
 
 func (sm *SyncedMemory) scheduleFlush() {
-	log.Println("In ScheduleFlush")
 	nextTime := time.Now().Truncate(time.Second)
 	nextTime = nextTime.Add(sm.config.FlushInterval)
 	time.Sleep(time.Until(nextTime))
@@ -102,7 +130,6 @@ func (sm *SyncedMemory) initializeStreamPointer() {
 }
 
 func (sm *SyncedMemory) scheduleReadFromStream() {
-	log.Println("In ScheduleReadFromStream")
 	nextTime := time.Now().Truncate(time.Second)
 	nextTime = nextTime.Add(sm.config.FlushInterval)
 	time.Sleep(time.Until(nextTime))
@@ -124,6 +151,8 @@ func (sm *SyncedMemory) readFromStream() {
 	var streamMap redis.XStream = res[0]
 	var streamEntries []redis.XMessage = streamMap.Messages
 	var lastKnownID string
+	var currentHost string = sm.config.host
+	log.Println("Current host: ", currentHost)
 	for _, entry := range streamEntries {
 		// XMessage {ID string, Values map[string]interface{}}
 		lastKnownID = entry.ID
@@ -133,12 +162,16 @@ func (sm *SyncedMemory) readFromStream() {
 			// skip this
 			continue
 		}
+		if host == currentHost {
+			continue
+		}
+		log.Printf("Processing %+v\n", values)
 		for k, v := range values {
 			if k == "host" {
 				continue
 			}
 			_, ok := sm.globalHostDataMap.Get(k)
-			if ok == false {
+			if ok == false { // new datapoint that we are seeing for the first time
 				sm.globalHostDataMap.Put(k, types.NewRevolvingMap(sm.config.MaxTTL))
 			}
 			m, _ := sm.globalHostDataMap.Get(k)
@@ -151,7 +184,7 @@ func (sm *SyncedMemory) readFromStream() {
 			}
 		}
 	}
-	log.Println(sm.globalHostDataMap)
+	// log.Printf("%+v\n", sm.globalHostDataMap)
 	sm.lastReadStreamID = lastKnownID
 	log.Println("Completed read from Redis stream")
 }
@@ -169,7 +202,7 @@ func (sm *SyncedMemory) flush() {
 		count = count + 1
 	}
 	// TODO - now stream it to Redis
-	ip := GetLocalIP()
+	ip := sm.config.host
 	totalDataPoints := len(dataPoints)
 	chunkSize := 100
 	chunks := totalDataPoints / chunkSize

@@ -71,7 +71,8 @@ func (m *RevolvingMap) Put(key string, val interface{}) interface{} {
 
 // GetInt - gets the value as int after applying type assertion
 func (m *RevolvingMap) GetInt(key string) (int, bool) {
-	val, ok := m.mapA[key]
+	currentMap := m.getCurrentlyActiveMap()
+	val, ok := (*currentMap)[key]
 	if ok {
 		// https://stackoverflow.com/questions/18041334/convert-interface-to-int
 		iVal, convOk := val.(int)
@@ -82,6 +83,25 @@ func (m *RevolvingMap) GetInt(key string) (int, bool) {
 
 // Get - generic Get command to read any value from the map
 func (m *RevolvingMap) Get(key string) (interface{}, bool) {
-	val, ok := m.mapA[key]
+	currentMap := m.getCurrentlyActiveMap()
+	val, ok := (*currentMap)[key]
 	return val, ok
+}
+
+func (m *RevolvingMap) getCurrentlyActiveMap() *map[interface{}]interface{} {
+	if m.lastCleaned == mapA {
+		return &m.mapB
+	} else {
+		return &m.mapA
+	}
+}
+
+// Keys - returns the keys in the map as an array
+func (m *RevolvingMap) Keys() []interface{} {
+	currentMap := m.getCurrentlyActiveMap()
+	var keys []interface{} = make([]interface{}, len(m.mapA))
+	for k, _ := range *currentMap {
+		keys = append(keys, k)
+	}
+	return keys
 }
