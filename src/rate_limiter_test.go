@@ -46,8 +46,31 @@ func benchmarkRateCounting(times int, b *testing.B) {
 	}
 }
 
+func benchmarkRateCountingOnRedisStore(times int, b *testing.B) {
+	wg := new(sync.WaitGroup)
+	concurrency := os.Getenv("CONCURRENCY")
+	if len(concurrency) > 0 {
+		cf, err := strconv.Atoi(concurrency)
+		if err != nil {
+			b.Fatal("Concurrency must be a valid number")
+		}
+		chunkSize := times / cf
+		for i := 0; i < cf; i++ {
+			wg.Add(1)
+			go func(waitgroup *sync.WaitGroup) {
+				defer waitgroup.Done()
+				benchmarkRateCountingOnStore(chunkSize, STORE_REDIS, b)
+			}(wg)
+		}
+		log.Println("Waiting for the routines to finish")
+		wg.Wait()
+	} else {
+		benchmarkRateCountingOnStore(times, STORE_REDIS, b)
+	}
+}
+
 func benchmarkRateCountingOnStore(times int, storeType StoreType, b *testing.B) {
-        log.Println("Times: ", times)
+	log.Println("Times: ", times)
 	cmrules := getCommonRules()
 	clrules := getClientRules()
 	limiter := NewApiRateLimiter(cmrules, clrules, storeType)
@@ -59,10 +82,10 @@ func benchmarkRateCountingOnStore(times int, storeType StoreType, b *testing.B) 
 }
 
 func init() {
-        s := os.Getenv("SILENT")
-        if len(s) > 0 {
-	  log.SetOutput(ioutil.Discard)
-        }
+	s := os.Getenv("SILENT")
+	if len(s) > 0 {
+		log.SetOutput(ioutil.Discard)
+	}
 }
 func BenchmarkEvents1k(b *testing.B)   { benchmarkRateCounting(1*1000, b) }
 func BenchmarkEvents10k(b *testing.B)  { benchmarkRateCounting(10*1000, b) }
@@ -74,38 +97,27 @@ func BenchmarkEvents100kWithMemory(b *testing.B) {
 func BenchmarkEvents100kWithRedis(b *testing.B) {
 	benchmarkRateCountingOnStore(100*1000, STORE_REDIS, b)
 }
-func BenchmarkEvents100kWithSyncMemoryOnce(b *testing.B) {
-        log.Println("Benchmarking for 100k")
+func BenchmarkEvents100kWithSyncMemory(b *testing.B) {
+	log.Println("Benchmarking for 100k")
 	benchmarkRateCountingOnStore(100000, STORE_SYNCED_MEMORY, b)
 }
 func BenchmarkEvents1mnWithMemory(b *testing.B) {
 	benchmarkRateCountingOnStore(1000*1000, STORE_MEMORY, b)
 }
 func BenchmarkEvents1mnWithSyncMemory(b *testing.B) {
-	benchmarkRateCountingOnStore(1 * 1000 * 1000, STORE_SYNCED_MEMORY, b)
+	benchmarkRateCountingOnStore(1*1000*1000, STORE_SYNCED_MEMORY, b)
 }
 func BenchmarkEvents1mnWithRedis(b *testing.B) {
-	wg := new(sync.WaitGroup)
-	concurrency := os.Getenv("CONCURRENCY")
-	if len(concurrency) > 0 {
-		cf, err := strconv.Atoi(concurrency)
-		if err != nil {
-			b.Fatal("Concurrency must be a valid number")
-		}
-		chunkSize := 1000000 / cf
-		for i := 0; i < cf; i++ {
-			wg.Add(1)
-			go func(waitgroup *sync.WaitGroup) {
-				defer waitgroup.Done()
-				benchmarkRateCountingOnStore(chunkSize, STORE_REDIS, b)
-			}(wg)
-		}
-		log.Println("Waiting for the routines to finish")
-		wg.Wait()
-	} else {
-		benchmarkRateCountingOnStore(1000*1000, STORE_REDIS, b)
-	}
+	benchmarkRateCountingOnRedisStore(1000*1000, b)
 }
+
+func BenchmarkEvents10mnWithRedis(b *testing.B) {
+	benchmarkRateCountingOnRedisStore(10*1000*1000, b)
+}
+func BenchmarkEvents10mnWithSyncMemory(b *testing.B) {
+	benchmarkRateCountingOnStore(10*1000*1000, STORE_SYNCED_MEMORY, b)
+}
+
 func BenchmarkEvents5mn(b *testing.B) { benchmarkRateCounting(5*1000*1000, b) }
 
 // 5million takes >100s to run on a typical laptop
