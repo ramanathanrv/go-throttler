@@ -28,23 +28,23 @@ type Event struct {
 	clientId   string
 }
 
-var localMap *types.Map
+// var localMap *types.Map
 
-func getCurrentTimeWindow(interval int) string {
+func (r *ApiRateLimiter) getCurrentTimeWindow(interval int) string {
 	// lookup the cache
 	lookupKey := fmt.Sprintf("time_interval_%d", interval)
-	val, resCode := localMap.Get(lookupKey)
+	val, resCode := r.trackerCheckMap.Get(lookupKey)
 	if resCode == types.HIT {
 		return val
 	} else {
 		currentWindow := timeslice.GetTimeWindow(interval)
-		localMap.Put(lookupKey, currentWindow, time.Duration(interval)*time.Second)
+		r.trackerCheckMap.Put(lookupKey, currentWindow, time.Duration(interval)*time.Second)
 		return currentWindow
 	}
 }
 
-func getTracker(inst Event, ruleId string, interval int) string {
-	window := getCurrentTimeWindow(interval)
+func (r *ApiRateLimiter) getTracker(inst Event, ruleId string, interval int) string {
+	window := r.getCurrentTimeWindow(interval)
 	return fmt.Sprintf("%s_%s_%s_%s", window, inst.clientId, inst.resourceId, ruleId)
 }
 
@@ -119,12 +119,13 @@ type ApiRateLimiter struct {
 	cmrules                    []CommonRule
 	clrules                    []ClientRule
 	store                      cache.Store
+	trackerCheckMap            *types.Map
 }
 
 func init() {
 	// store = cache.NewRedisStore(*cache.DevConfig())
 	// store = cache.NewCache(time.Duration(300 * time.Second))
-	localMap = types.NewMap()
+	// localMap = types.NewMap()
 }
 
 func NewApiRateLimiter(cmrs []CommonRule, clrs []ClientRule, storeType StoreType) *ApiRateLimiter {
@@ -142,6 +143,7 @@ func NewApiRateLimiter(cmrs []CommonRule, clrs []ClientRule, storeType StoreType
 	limiter.store = store
 	limiter.commonRulesIdxById = make(map[string]CommonRule)
 	limiter.commonRulesIdxByResourceId = make(map[string]CommonRule)
+	limiter.trackerCheckMap = types.NewMap()
 	for _, cmr := range cmrs {
 		limiter.commonRulesIdxById[cmr.id] = cmr
 		limiter.commonRulesIdxByResourceId[cmr.resourceId] = cmr
@@ -157,7 +159,7 @@ func (r *ApiRateLimiter) RecordEventAndCheck(inst Event) Result {
 	// now we have to execute the match against common & client specific
 	// all matching rules are fair game
 	for _, cmr := range prunedCommonRules {
-		trackId := getTracker(inst, cmr.id, cmr.interval)
+		trackId := r.getTracker(inst, cmr.id, cmr.interval)
 		val = r.store.IncrAndGet(trackId)
 		// fmt.Printf("Current count is %s :: %d, quota is %d\n" , trackId, val, cmr.quota)
 		if val > cmr.quota {
@@ -168,7 +170,7 @@ func (r *ApiRateLimiter) RecordEventAndCheck(inst Event) Result {
 
 	for _, clr := range matchingClientRules {
 		cmr, _ := r.getCommonRuleById(clr.overridenCommonRuleId)
-		trackId := getTracker(inst, clr.id, cmr.interval)
+		trackId := r.getTracker(inst, clr.id, cmr.interval)
 		val = r.store.IncrAndGet(trackId)
 		// fmt.Printf("Current count is %s :: %d, quota is %d\n" , trackId, val, clr.quota)
 		if val > clr.quota {
