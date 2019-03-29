@@ -2,10 +2,13 @@ package types
 
 import (
 	"fmt"
+	"sync"
 	"time"
 )
 
 type mapPtr int
+
+var lock = sync.RWMutex{}
 
 const (
 	mapA mapPtr = iota
@@ -57,6 +60,8 @@ func (m *RevolvingMap) GetCurrentMap() map[interface{}]interface{} {
 
 // PutInt - puts the given integer into the map
 func (m *RevolvingMap) PutInt(key string, val int) int {
+	lock.Lock()
+	defer lock.Unlock()
 	m.mapA[key] = val
 	m.mapB[key] = val
 	return val
@@ -64,6 +69,8 @@ func (m *RevolvingMap) PutInt(key string, val int) int {
 
 // Put - generic put command to add any value to the map
 func (m *RevolvingMap) Put(key string, val interface{}) interface{} {
+	lock.Lock()
+	defer lock.Unlock()
 	m.mapA[key] = val
 	m.mapB[key] = val
 	return val
@@ -72,6 +79,8 @@ func (m *RevolvingMap) Put(key string, val interface{}) interface{} {
 // GetInt - gets the value as int after applying type assertion
 func (m *RevolvingMap) GetInt(key string) (int, bool) {
 	currentMap := m.getCurrentlyActiveMap()
+	lock.RLock()
+	defer lock.RUnlock()
 	val, ok := (*currentMap)[key]
 	if ok {
 		// https://stackoverflow.com/questions/18041334/convert-interface-to-int
@@ -83,6 +92,8 @@ func (m *RevolvingMap) GetInt(key string) (int, bool) {
 
 // Get - generic Get command to read any value from the map
 func (m *RevolvingMap) Get(key string) (interface{}, bool) {
+	lock.RLock()
+	defer lock.RUnlock()
 	currentMap := m.getCurrentlyActiveMap()
 	val, ok := (*currentMap)[key]
 	return val, ok
@@ -99,6 +110,8 @@ func (m *RevolvingMap) getCurrentlyActiveMap() *map[interface{}]interface{} {
 // Keys - returns the keys in the map as an array
 func (m *RevolvingMap) Keys() []interface{} {
 	currentMap := m.getCurrentlyActiveMap()
+	lock.RLock()
+	defer lock.RUnlock()
 	var keys []interface{} = make([]interface{}, len(m.mapA))
 	for k, _ := range *currentMap {
 		keys = append(keys, k)

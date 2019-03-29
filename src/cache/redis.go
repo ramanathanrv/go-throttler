@@ -2,6 +2,7 @@ package cache
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	"../types"
@@ -21,12 +22,17 @@ type redisStore struct {
 }
 
 func DevConfig() *RedisConfig {
-	return &RedisConfig{
+	redisHost := os.Getenv("REDIS_HOST")
+	conf := RedisConfig{
 		Host:     "127.0.0.1",
 		Port:     6379,
 		DB:       0,
 		Password: "",
 	}
+	if len(redisHost) > 0 {
+		conf.Host = redisHost
+	}
+	return &conf
 }
 
 func NewRedisStore(config RedisConfig) *redisStore {
