@@ -5,6 +5,8 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -78,7 +80,26 @@ func BenchmarkEvents1mnWithSyncMemory(b *testing.B) {
 	benchmarkRateCountingOnStore(1000*1000, STORE_SYNCED_MEMORY, b)
 }
 func BenchmarkEvents1mnWithRedis(b *testing.B) {
-	benchmarkRateCountingOnStore(1000*1000, STORE_REDIS, b)
+	wg := new(sync.WaitGroup)
+	concurrency := os.Getenv("CONCURRENCY")
+	if len(concurrency) > 0 {
+		cf, err := strconv.Atoi(concurrency)
+		if err != nil {
+			b.Fatal("Concurrency must be a valid number")
+		}
+		chunkSize := 1000000 / cf
+		for i := 0; i < cf; i++ {
+			wg.Add(1)
+			go func(waitgroup *sync.WaitGroup) {
+				defer waitgroup.Done()
+				benchmarkRateCountingOnStore(chunkSize, STORE_REDIS, b)
+			}(wg)
+		}
+		log.Println("Waiting for the routines to finish")
+		wg.Wait()
+	} else {
+		benchmarkRateCountingOnStore(1000*1000, STORE_REDIS, b)
+	}
 }
 func BenchmarkEvents5mn(b *testing.B) { benchmarkRateCounting(5*1000*1000, b) }
 
